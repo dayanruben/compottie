@@ -4,6 +4,7 @@ on:
     types: [released, prereleased]
 jobs:
   publish:
+    if: github.repository == 'alexzhirkevich/compottie'
     name: Release build and publish
     runs-on: macOS-latest
     steps:
