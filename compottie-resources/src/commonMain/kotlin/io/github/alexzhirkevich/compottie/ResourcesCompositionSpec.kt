@@ -1,6 +1,8 @@
 package io.github.alexzhirkevich.compottie
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.LocalResourceReader
@@ -15,12 +17,15 @@ import org.jetbrains.compose.resources.ResourceReader
  *
  * ```kotlin
  * val composition by rememberLottieComposition(
- *      path = "files/anim.lottie",
- *      reader = Res::readBytes
+ *      LottieCompositionSpec.Resource(
+ *          path = "files/anim.lottie",
+ *          reader = Res::readBytes
+ *      )
  * )
  * ```
  * */
 @ExperimentalCompottieApi
+@Stable
 public fun LottieCompositionSpec.Companion.Resource(
     path : String,
     reader : suspend (path : String) -> ByteArray
@@ -34,7 +39,9 @@ public fun LottieCompositionSpec.Companion.Resource(
  *
  * ```kotlin
  * val composition by rememberLottieComposition(
- *      Res.getUri("files/anim.lottie"),
+ *      LottieCompositionSpec.Resource(
+ *          Res.getUri("files/anim.lottie")
+ *      )
  * )
  * ```
  * */
@@ -42,6 +49,7 @@ public fun LottieCompositionSpec.Companion.Resource(
 @OptIn(ExperimentalResourceApi::class)
 @ExperimentalCompottieApi
 @Composable
+@Stable
 public fun LottieCompositionSpec.Companion.Resource(
     uri : String,
     directory : String = "composeResources",
@@ -53,6 +61,7 @@ public fun LottieCompositionSpec.Companion.Resource(
     )
 }
 
+@Immutable
 private class ResourcesCompositionSpec(
     val path : String,
     val reader : suspend (path : String) -> ByteArray
@@ -85,5 +94,4 @@ private class ResourcesCompositionSpec(
     override fun toString(): String {
         return "ResourcesCompositionSpec(path='$path')"
     }
-
 }

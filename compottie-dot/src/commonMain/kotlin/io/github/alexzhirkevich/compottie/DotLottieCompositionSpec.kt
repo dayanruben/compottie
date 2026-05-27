@@ -18,6 +18,7 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import okio.Path.Companion.toPath
+import androidx.compose.runtime.Stable
 
 /**
  * [LottieComposition] from a dotLottie zip archive.
@@ -25,6 +26,7 @@ import okio.Path.Companion.toPath
  * @param archive dotLottie or zip archive file
  * @param animationId animation id (if dotLottie contains multiple animations)
  * */
+@Stable
 public fun LottieCompositionSpec.Companion.DotLottie(
     archive: ByteArray,
     animationId: String? = null
@@ -51,6 +53,7 @@ private val DotLottieJson = Json {
     }
 }
 
+@Stable
 private class DotLottieCompositionSpec(
     private val archive : ByteArray,
     private val animationId : String?,
