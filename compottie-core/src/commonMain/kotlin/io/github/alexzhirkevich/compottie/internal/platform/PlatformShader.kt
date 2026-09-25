@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shader
-import androidx.compose.ui.graphics.TileMode
 import io.github.alexzhirkevich.compottie.LruMap
 import io.github.alexzhirkevich.compottie.dynamic.LottieGradient
 import io.github.alexzhirkevich.compottie.internal.AnimationState
@@ -21,7 +20,11 @@ import io.github.alexzhirkevich.compottie.internal.animation.Vec2
 import io.github.alexzhirkevich.compottie.internal.animation.interpolatedNorm
 import io.github.alexzhirkevich.compottie.internal.helpers.GradientColors
 import io.github.alexzhirkevich.compottie.internal.helpers.GradientType
+import io.github.alexzhirkevich.compottie.internal.utils.degreeToRadians
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.sin
 
 internal class GradientCache {
 
@@ -146,7 +149,6 @@ internal fun GradientShader(
                 to = Offset(end.x, end.y),
                 colors = c.colors,
                 colorStops = c.colorStops,
-                tileMode = TileMode.Clamp,
                 matrix = matrix,
                 cache = cache
             )
@@ -161,7 +163,6 @@ internal fun GradientShader(
                 highlightingLength = highlightingLength?.interpolatedNorm(state) ?: 0f,
                 colors = c.colors,
                 colorStops = c.colorStops,
-                tileMode = TileMode.Clamp,
                 matrix = matrix,
                 cache = cache
             )
@@ -186,7 +187,6 @@ private fun CachedLinearGradient(
     to : Offset,
     colors : List<Color>,
     colorStops: List<Float>,
-    tileMode: TileMode = TileMode.Clamp,
     matrix: Matrix,
     cache : GradientCache,
 ) : Shader {
@@ -194,7 +194,6 @@ private fun CachedLinearGradient(
     var hash = from.hashCode()
     hash = (hash * 31) + to.hashCode()
     hash = (hash * 31) + colors.hashCode()
-    hash = (hash * 31) + tileMode.hashCode()
     hash = (hash * 31) + matrix.hashCode()
 
     return cache.getOrPut(hash, true) {
@@ -203,10 +202,28 @@ private fun CachedLinearGradient(
             to = to,
             colors = colors,
             colorStops = colorStops,
-            tileMode = tileMode,
             matrix = matrix
         )
     }
+}
+
+internal fun radialFocalPoint(
+    center: Offset,
+    radius: Float,
+    angleDeg: Float,
+    lengthPx: Float
+): Offset {
+    val maxLength = radius * 0.99f
+    val length = if (abs(lengthPx) > maxLength) {
+        maxLength * (if (lengthPx < 0f) -1f else 1f)
+    } else {
+        lengthPx
+    }
+    val rad = degreeToRadians(angleDeg)
+    return Offset(
+        x = center.x + length * cos(rad),
+        y = center.y + length * sin(rad)
+    )
 }
 
 private fun CachedRadialGradient(
@@ -216,7 +233,6 @@ private fun CachedRadialGradient(
     highlightingLength : Float,
     colors : List<Color>,
     colorStops: List<Float>,
-    tileMode: TileMode = TileMode.Clamp,
     matrix: Matrix,
     cache : GradientCache,
 ) : Shader {
@@ -226,7 +242,6 @@ private fun CachedRadialGradient(
     hash = (hash * 31) + colors.hashCode()
     hash = (hash * 31) + highlightingAngle.hashCode()
     hash = (hash * 31) + highlightingLength.hashCode()
-    hash = (hash * 31) + tileMode.hashCode()
     hash = (hash * 31) + matrix.hashCode()
 
     return cache.getOrPut(hash, false) {
@@ -237,7 +252,6 @@ private fun CachedRadialGradient(
             highlightingLength = highlightingLength * radius,
             colors = colors,
             colorStops = colorStops,
-            tileMode = tileMode,
             matrix = matrix
         )
     }
@@ -272,11 +286,10 @@ private fun CachedSweepGradient(
 
 
 internal expect fun MakeLinearGradient(
-    from : Offset,
-    to : Offset,
-    colors : List<Color>,
+    from: Offset,
+    to: Offset,
+    colors: List<Color>,
     colorStops: List<Float>,
-    tileMode: TileMode = TileMode.Clamp,
     matrix: Matrix
 ) : Shader
 
@@ -288,7 +301,6 @@ internal expect fun MakeRadialGradient(
     highlightingLength : Float,
     colors : List<Color>,
     colorStops: List<Float>,
-    tileMode: TileMode = TileMode.Clamp,
     matrix: Matrix
 ) : Shader
 
@@ -301,7 +313,6 @@ internal expect fun MakeSweepGradient(
 ) : Shader
 
 internal expect fun Paint.setBlurMaskFilter(radius: Float, isImage : Boolean = false)
-
 
 internal val ColorFilter.Companion.Luma : ColorFilter
     get() = LumaColorFilter//org.jetbrains.skia.ColorFilter.luma.asComposeColorFilter()

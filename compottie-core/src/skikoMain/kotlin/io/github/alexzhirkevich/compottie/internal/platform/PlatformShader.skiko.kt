@@ -5,10 +5,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shader
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.asComposeShader
 import androidx.compose.ui.graphics.skiaPaint
-import androidx.compose.ui.graphics.toArgb
 import io.github.alexzhirkevich.compottie.internal.utils.degreeToRadians
 import org.jetbrains.skia.Color4f
 import org.jetbrains.skia.FilterBlurMode
@@ -21,13 +19,13 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import org.jetbrains.skia.Shader as SkShader
+import kotlin.native.concurrent.ThreadLocal as NativeThreadLocal
 
 internal actual fun MakeLinearGradient(
-    from : Offset,
-    to : Offset,
-    colors : List<Color>,
+    from: Offset,
+    to: Offset,
+    colors: List<Color>,
     colorStops: List<Float>,
-    tileMode: TileMode,
     matrix: Matrix
 ) : Shader = SkShader.makeLinearGradient(
     x0 = from.x,
@@ -47,8 +45,6 @@ internal actual fun MakeLinearGradient(
     localMatrix = matrix.asSkia33(coerceScale = true)
 ).asComposeShader()
 
-private val tmpMatrix = Matrix()
-
 internal actual fun MakeRadialGradient(
     center : Offset,
     radius : Float,
@@ -56,39 +52,50 @@ internal actual fun MakeRadialGradient(
     highlightingLength : Float,
     colors : List<Color>,
     colorStops: List<Float>,
-    tileMode: TileMode,
     matrix: Matrix
-) : Shader = SkShader.makeRadialGradient(
-    x = center.x,
-    y = center.y,
-    radius = radius,
-    gradient = Gradient(
-        colors = Gradient.Colors(
-            colors = colors.toColor4fArray(),
-            positions = colorStops.toFloatArray(),
-            tileMode = FilterTileMode.CLAMP
-        ),
-        interpolation = Gradient.Interpolation(
-            inPremul = Gradient.Interpolation.InPremul.YES
-        )
-    ),
-    localMatrix = if (highlightingLength == 0f) {
-        matrix.asSkia33(coerceScale = true)
+) : Shader {
+    return if (highlightingLength == 0f || radius < 0.01f){
+        SkShader.makeRadialGradient(
+            x = center.x,
+            y = center.y,
+            radius = radius,
+            gradient = Gradient(
+                colors = Gradient.Colors(
+                    colors = colors.toColor4fArray(),
+                    positions = colorStops.toFloatArray(),
+                    tileMode = FilterTileMode.CLAMP
+                ),
+                interpolation = Gradient.Interpolation(
+                    inPremul = Gradient.Interpolation.InPremul.YES
+                )
+            ),
+            localMatrix = matrix.asSkia33(coerceScale = true)
+        ).asComposeShader()
     } else {
-        val angle = degreeToRadians(highlightingAngle)
-        val focalOffsetX = highlightingLength * sin(angle)
-        val focalOffsetY = highlightingLength * cos(angle)
 
-        tmpMatrix.resetToPivotedTransform(
-            pivotX = center.x,
-            pivotY = center.y,
-            translationX = focalOffsetX,
-            translationY = focalOffsetY,
-        )
-        tmpMatrix.timesAssign(matrix)
-        tmpMatrix.asSkia33(coerceScale = true)
+        val focal = radialFocalPoint(center, radius, highlightingAngle, highlightingLength)
+
+        SkShader.makeTwoPointConicalGradient(
+            x0 = focal.x,
+            y0 = focal.y,
+            x1 = center.x,
+            y1 = center.y,
+            startRadius = 0f,
+            endRadius = radius,
+            gradient = Gradient(
+                colors = Gradient.Colors(
+                    colors = colors.toColor4fArray(),
+                    positions = colorStops.toFloatArray(),
+                    tileMode = FilterTileMode.CLAMP
+                ),
+                interpolation = Gradient.Interpolation(
+                    inPremul = Gradient.Interpolation.InPremul.YES
+                )
+            ),
+            localMatrix = matrix.asSkia33(coerceScale = true)
+        ).asComposeShader()
     }
-).asComposeShader()
+}
 
 internal actual fun MakeSweepGradient(
     center: Offset,
@@ -122,7 +129,8 @@ internal actual fun MakeSweepGradient(
         }
 ).asComposeShader()
 
-private val _tmpMatrix33 = Matrix33.makeTranslate(0f,0f)
+@NativeThreadLocal
+private val _tmpMatrix33 = ThreadLocal<Matrix33>()
 
 private const val tolerance = (1.0f / (1 shl 12)).toDouble()
 
@@ -160,39 +168,26 @@ internal fun Matrix.asSkia33(coerceScale : Boolean = false) : Matrix33 {
         else -> values[Matrix.ScaleY]
     }
 
-    return _tmpMatrix33.apply {
-        mat[0] = scaleX
-        mat[1] = values[Matrix.SkewX]
-        mat[2] = values[Matrix.TranslateX]
-        mat[3] = values[Matrix.SkewY]
-        mat[4] = scaleY
-        mat[5] = values[Matrix.TranslateY]
-        mat[6] = values[Matrix.Perspective0]
-        mat[7] = values[Matrix.Perspective1]
-        mat[8] = values[Matrix.Perspective2]
-    }
+    return _tmpMatrix33
+        .getOrSet { Matrix33.makeTranslate(0f, 0f) }
+        .apply {
+            mat[0] = scaleX
+            mat[1] = values[Matrix.SkewX]
+            mat[2] = values[Matrix.TranslateX]
+            mat[3] = values[Matrix.SkewY]
+            mat[4] = scaleY
+            mat[5] = values[Matrix.TranslateY]
+            mat[6] = values[Matrix.Perspective0]
+            mat[7] = values[Matrix.Perspective1]
+            mat[8] = values[Matrix.Perspective2]
+        }
 }
-
-private fun List<Color>.toIntArray(): IntArray =
-    IntArray(size) { i -> this[i].toArgb() }
 
 private fun List<Color>.toColor4fArray(): Array<Color4f> =
     Array(size) { i ->
         val color = this[i]
         Color4f(color.red, color.green, color.blue, color.alpha)
     }
-
-internal fun TileMode.toSkiaTileMode(): FilterTileMode = when (this) {
-    TileMode.Clamp -> FilterTileMode.CLAMP
-    TileMode.Repeated -> FilterTileMode.REPEAT
-    TileMode.Mirror -> FilterTileMode.MIRROR
-    TileMode.Decal -> FilterTileMode.DECAL
-    else -> FilterTileMode.CLAMP
-}
-
-//internal actual val ColorFilter.Companion.Luma get() = org.jetbrains.skia.ColorFilter.luma.asComposeColorFilter()
-
-
 
 internal actual fun Paint.setBlurMaskFilter(radius: Float, isImage : Boolean) {
     val skPaint = skiaPaint
